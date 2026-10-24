@@ -20,13 +20,17 @@
           pkgs = import nixpkgs { inherit system; };
           lib = pkgs.lib;
         in
-        pkgs.rustPlatform.buildRustPackage {
-          pname = manifest.package.name;
-          src = lib.cleanSource ./.;
+        {
+          default = pkgs.rustPlatform.buildRustPackage {
+            pname = manifest.package.name;
+            src = lib.cleanSource ./.;
+            version = manifest.package.version;
+            cargoLock.lockFile = ./Cargo.lock;
 
-          meta = {
-            licenses = lib.licenses.mit;
-            mainProgram = manifest.package.name;
+            meta = {
+              licenses = lib.licenses.mit;
+              mainProgram = manifest.package.name;
+            };
           };
         }
       );
