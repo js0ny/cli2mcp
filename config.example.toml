@@ -1,0 +1,10 @@
+[default]
+timeout_ms = 500
+effect = "ro"
+
+[[tools]]
+expose_name = "echo"
+description = "Print a message"
+exec = "printf"
+args = ["%s\n", "Hello from cli2mcp"]
+env_inherit = []
