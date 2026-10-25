@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ["[0-9]*.[0-9]*.[0-9]*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate version and tag
+        id: version
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import tomllib
+
+          with open('Cargo.toml', 'rb') as manifest:
+              version = tomllib.load(manifest)['package']['version']
+          if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
+              raise SystemExit('Release versions must use MAJOR.MINOR.PATCH')
+          if os.environ['GITHUB_REF_TYPE'] == 'tag' and os.environ['GITHUB_REF_NAME'] != version:
+              raise SystemExit(f'Tag must equal Cargo.toml version {version}, without a v prefix')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+          PY
+
+  build:
+    needs: metadata
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --locked
+      - name: Check version
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: test "$(./target/release/cli2mcp --version)" = "cli2mcp ${VERSION}"
+      - name: Package
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          archive="cli2mcp-${VERSION}-${TARGET}"
+          mkdir -p "$RUNNER_TEMP/$archive" dist
+          strip target/release/cli2mcp
+          install -m755 target/release/cli2mcp "$RUNNER_TEMP/$archive/cli2mcp"
+          install -m644 README.md "$RUNNER_TEMP/$archive/"
+          if [ -f LICENSE ]; then
+            install -m644 LICENSE "$RUNNER_TEMP/$archive/"
+          fi
+          tar -czf "dist/${archive}.tar.gz" -C "$RUNNER_TEMP" "$archive"
+      - uses: actions/upload-artifact@v4
+        if: github.ref_type == 'tag'
+        with:
+          name: cli2mcp-${{ matrix.target }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [metadata, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cli2mcp-*
+          merge-multiple: true
+          path: dist
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/*.tar.gz \
+            --draft \
+            --verify-tag \
+            --title "$TAG" \
+            --generate-notes

@@ -23,6 +23,7 @@ fn main() -> ExitCode {
 #[tokio::main(flavor = "current_thread")]
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let matches = Command::new("cli2mcp")
+        .version(env!("CARGO_PKG_VERSION"))
         .arg(
             Arg::new("config")
                 .required(true)
