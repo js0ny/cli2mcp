@@ -2,10 +2,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, ExitStatus, Stdio},
-    sync::{
-        LazyLock,
-        mpsc,
-    },
+    sync::{LazyLock, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -86,11 +83,7 @@ impl Service {
         Self::start_with(config, dir, |_| {})
     }
 
-    fn start_with(
-        config: &Path,
-        dir: &Path,
-        configure: impl FnOnce(&mut Command),
-    ) -> Self {
+    fn start_with(config: &Path, dir: &Path, configure: impl FnOnce(&mut Command)) -> Self {
         let mut command = Command::new(env!("CARGO_BIN_EXE_cli2mcp"));
         command
             .arg(config)
@@ -135,12 +128,19 @@ impl Service {
     }
 
     fn call_request(&mut self, id: u64, name: &str, arguments: Value) -> Value {
-        self.request(id, "tools/call", json!({"name": name, "arguments": arguments}))
+        self.request(
+            id,
+            "tools/call",
+            json!({"name": name, "arguments": arguments}),
+        )
     }
 
     fn call(&mut self, id: u64, name: &str, arguments: Value) -> Value {
         let message = self.call_request(id, name, arguments);
-        assert!(message.get("error").is_none(), "unexpected error: {message}");
+        assert!(
+            message.get("error").is_none(),
+            "unexpected error: {message}"
+        );
         message["result"].clone()
     }
 
@@ -265,13 +265,19 @@ fn discovers_tools_and_lists_them_in_configuration_order() {
             .any(|version| version == "2026-07-28")
     );
     assert_eq!(discover["capabilities"], json!({"tools": {}}));
-    assert_eq!(discover["_meta"]["io.modelcontextprotocol/serverInfo"]["name"], "cli2mcp");
+    assert_eq!(
+        discover["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+        "cli2mcp"
+    );
 
     let listed = service.request(2, "tools/list", json!({}));
     let listed = &listed["result"];
     assert_eq!(listed["resultType"], "complete");
     let tools = listed["tools"].as_array().unwrap();
-    let names: Vec<&str> = tools.iter().map(|tool| tool["name"].as_str().unwrap()).collect();
+    let names: Vec<&str> = tools
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
     assert_eq!(names, ["echo", "plain", "writer"]);
 
     assert_eq!(
@@ -283,9 +289,18 @@ fn discovers_tools_and_lists_them_in_configuration_order() {
             "additionalProperties": false,
         })
     );
-    assert_eq!(tools[0]["annotations"], json!({"readOnlyHint": false, "destructiveHint": true}));
-    assert_eq!(tools[1]["annotations"], json!({"readOnlyHint": true, "destructiveHint": false}));
-    assert_eq!(tools[2]["annotations"], json!({"readOnlyHint": false, "destructiveHint": false}));
+    assert_eq!(
+        tools[0]["annotations"],
+        json!({"readOnlyHint": false, "destructiveHint": true})
+    );
+    assert_eq!(
+        tools[1]["annotations"],
+        json!({"readOnlyHint": true, "destructiveHint": false})
+    );
+    assert_eq!(
+        tools[2]["annotations"],
+        json!({"readOnlyHint": false, "destructiveHint": false})
+    );
     assert_eq!(
         tools[1]["inputSchema"],
         json!({"type": "object", "properties": {}, "additionalProperties": false})
@@ -305,10 +320,7 @@ fn substituted_arguments_are_single_literal_argv_entries() {
     );
     let mut service = Service::start(&write_config(&dir, &tools), dir.path());
 
-    let literal = format!(
-        "a b; $(touch {}) * {{2}}\n\"quoted\"",
-        sentinel.display()
-    );
+    let literal = format!("a b; $(touch {}) * {{2}}\n\"quoted\"", sentinel.display());
     let result = service.call(1, "echo", json!({"1": literal, "2": "{1}"}));
     assert_eq!(result["isError"], false);
     assert_eq!(
@@ -335,19 +347,31 @@ fn exit_status_and_streams_map_to_tool_results() {
     .concat();
     let mut service = Service::start(&write_config(&dir, &tools), dir.path());
 
-    assert_eq!(text_of(&service.call(1, "empty", json!({}))), ["Exit 0, no stdout"]);
+    assert_eq!(
+        text_of(&service.call(1, "empty", json!({}))),
+        ["Exit 0, no stdout"]
+    );
     assert_eq!(text_of(&service.call(2, "text", json!({}))), ["hello"]);
     assert_eq!(text_of(&service.call(3, "blank", json!({}))), [" \n"]);
     assert_eq!(
         text_of(&service.call(4, "partial", json!({}))),
         ["Exit code: 3", "[stdout]\npartial", "[stderr]\nboom"]
     );
-    assert_eq!(text_of(&service.call(5, "silent", json!({}))), ["Exit code: 3"]);
-    assert_eq!(text_of(&service.call(6, "invalid", json!({}))), ["\u{fffd}\u{fffd}a"]);
+    assert_eq!(
+        text_of(&service.call(5, "silent", json!({}))),
+        ["Exit code: 3"]
+    );
+    assert_eq!(
+        text_of(&service.call(6, "invalid", json!({}))),
+        ["\u{fffd}\u{fffd}a"]
+    );
 
     assert_eq!(service.call(7, "partial", json!({}))["isError"], true);
     assert_eq!(service.call(8, "text", json!({}))["isError"], false);
-    assert_eq!(service.request(9, "tools/list", json!({}))["result"]["resultType"], "complete");
+    assert_eq!(
+        service.request(9, "tools/list", json!({}))["result"]["resultType"],
+        "complete"
+    );
 }
 
 #[test]
@@ -551,7 +575,12 @@ fn leader_exit_does_not_end_the_call_while_a_descendant_holds_the_pipe() {
 fn timeout_still_applies_after_the_output_streams_close() {
     let dir = tempfile::tempdir().unwrap();
     let ready = dir.path().join("ready.pid");
-    let tools = fixture_tool("sleepy", &["close-then-sleep", "{1}", "60000"], Some(300), "");
+    let tools = fixture_tool(
+        "sleepy",
+        &["close-then-sleep", "{1}", "60000"],
+        Some(300),
+        "",
+    );
     let mut service = Service::start(&write_config(&dir, &tools), dir.path());
 
     service.send(json!({
@@ -628,7 +657,8 @@ fn cancellation_kills_the_group_and_suppresses_the_response() {
 
     let late = service.drain_for(Duration::from_millis(300));
     assert!(
-        late.iter().all(|message| message.get("id").and_then(Value::as_u64) != Some(20)),
+        late.iter()
+            .all(|message| message.get("id").and_then(Value::as_u64) != Some(20)),
         "cancelled request produced a response: {late:?}"
     );
     wait_until_dead(pid);

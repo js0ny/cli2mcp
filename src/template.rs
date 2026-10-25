@@ -74,7 +74,10 @@ impl ArgumentTemplate {
                     .expect("parameter was collected during parsing");
             }
         }
-        let parameters = numbers.into_iter().map(|number| number.to_string()).collect();
+        let parameters = numbers
+            .into_iter()
+            .map(|number| number.to_string())
+            .collect();
 
         Ok(Self {
             source,
@@ -193,7 +196,10 @@ mod tests {
     #[test]
     fn embedded_repeated_and_escaped_placeholders_render_single_argv_entries() {
         let template = ArgumentTemplate::parse("--file={1}".to_owned()).unwrap();
-        assert_eq!(rendered(&template, &[("1", json!("my dir"))]), "--file=my dir");
+        assert_eq!(
+            rendered(&template, &[("1", json!("my dir"))]),
+            "--file=my dir"
+        );
 
         let template = ArgumentTemplate::parse("{1}/{2}".to_owned()).unwrap();
         assert_eq!(
@@ -215,19 +221,13 @@ mod tests {
     #[test]
     fn parameters_are_unique_and_numerically_sorted() {
         let template = ArgumentTemplate::parse("{10}{2}{1}{2}{{3}}".to_owned()).unwrap();
-        assert_eq!(
-            template.parameters().collect::<Vec<_>>(),
-            ["1", "2", "10"]
-        );
+        assert_eq!(template.parameters().collect::<Vec<_>>(), ["1", "2", "10"]);
     }
 
     #[test]
     fn substituted_values_are_not_reparsed() {
         let template = ArgumentTemplate::parse("{1}".to_owned()).unwrap();
-        assert_eq!(
-            rendered(&template, &[("1", json!("{2}"))]),
-            "{2}",
-        );
+        assert_eq!(rendered(&template, &[("1", json!("{2}"))]), "{2}",);
         assert_eq!(
             rendered(&template, &[("1", json!("a b; $(touch x) *"))]),
             "a b; $(touch x) *",
@@ -258,7 +258,10 @@ mod tests {
                 "placeholder '{99999999999999999999999999}' overflows",
             ),
         ] {
-            assert_eq!(ArgumentTemplate::parse(source.to_owned()).unwrap_err(), expected);
+            assert_eq!(
+                ArgumentTemplate::parse(source.to_owned()).unwrap_err(),
+                expected
+            );
         }
     }
 
@@ -266,7 +269,9 @@ mod tests {
     fn missing_or_non_string_arguments_are_rejected() {
         let template = ArgumentTemplate::parse("{1}{2}".to_owned()).unwrap();
         assert_eq!(
-            template.render(&arguments(&[("2", json!("x"))])).unwrap_err(),
+            template
+                .render(&arguments(&[("2", json!("x"))]))
+                .unwrap_err(),
             "missing argument '1'"
         );
         assert_eq!(

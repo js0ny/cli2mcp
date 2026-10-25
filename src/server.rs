@@ -43,8 +43,9 @@ impl CliServer {
             }
 
             let schema = template::input_schema(&template::parameter_names(&templates));
-            let validator = jsonschema::validator_for(&serde_json::Value::Object(schema.clone()))
-                .map_err(|error| format!("tool '{name}': invalid input schema: {error}"))?;
+            let validator =
+                jsonschema::validator_for(&serde_json::Value::Object(schema.clone()))
+                    .map_err(|error| format!("tool '{name}': invalid input schema: {error}"))?;
 
             let tool = Tool::new(name.clone(), resolved.description.clone(), Arc::new(schema))
                 .with_annotations(annotations_for(resolved.effect));

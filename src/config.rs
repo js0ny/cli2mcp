@@ -128,9 +128,9 @@ fn error_for(name: &str, message: &str) -> String {
 
 fn is_valid_tool_name(name: &str) -> bool {
     (1..=128).contains(&name.len())
-        && name
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_-.".contains(&byte))
+        && name.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_-.".contains(&byte)
+        })
 }
 
 fn merge_tool_config(tool: ToolConfig, defaults: &DefaultConfigPart) -> ResolvedToolConfig {
@@ -261,7 +261,10 @@ mod tests {
             format!("{TOOL}\ntimeout_ms = 0\n"),
         ] {
             let error = load_str(&contents).unwrap_err();
-            assert!(error.contains("timeout_ms must be greater than 0"), "{error}");
+            assert!(
+                error.contains("timeout_ms must be greater than 0"),
+                "{error}"
+            );
         }
 
         let contents = format!("[default]\ntimeout_ms = 900\n{TOOL}\ntimeout_ms = 0\n");

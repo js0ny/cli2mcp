@@ -59,9 +59,13 @@ pub(crate) async fn execute(
             return Some(Report::error(format!("Failed to start process: {error}")).into_result());
         }
     };
-    let (Some(stdout_reader), Some(stderr_reader)) = (owner.child.stdout.take(), owner.child.stderr.take())
+    let (Some(stdout_reader), Some(stderr_reader)) =
+        (owner.child.stdout.take(), owner.child.stderr.take())
     else {
-        return Some(Report::error("Failed to start process: output pipes are not captured".to_owned()).into_result());
+        return Some(
+            Report::error("Failed to start process: output pipes are not captured".to_owned())
+                .into_result(),
+        );
     };
 
     let mut stdout = Vec::new();
@@ -256,10 +260,16 @@ impl Report {
         let mut content = vec![ContentBlock::text(self.headline)];
         content.extend(self.extra.into_iter().map(ContentBlock::text));
         if !self.stdout.is_empty() {
-            content.push(ContentBlock::text(format!("[stdout]\n{}", decode(self.stdout))));
+            content.push(ContentBlock::text(format!(
+                "[stdout]\n{}",
+                decode(self.stdout)
+            )));
         }
         if !self.stderr.is_empty() {
-            content.push(ContentBlock::text(format!("[stderr]\n{}", decode(self.stderr))));
+            content.push(ContentBlock::text(format!(
+                "[stderr]\n{}",
+                decode(self.stderr)
+            )));
         }
         CallToolResult::error(content)
     }
