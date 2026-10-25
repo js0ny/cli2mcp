@@ -2,6 +2,8 @@
 name = "cli2mcp"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "An MCP bridge converted from CLI for better permission control"
 
 [dependencies]
 clap = "4.6.7"
