@@ -438,6 +438,192 @@ fn unknown_tool_is_a_protocol_error() {
 }
 
 #[test]
+fn effect_filter_lists_only_allowed_tools() {
+    let dir = tempfile::tempdir().unwrap();
+    let tools = format!(
+        "{}{}{}{}",
+        fixture_tool("implicit", &["argv", "{1}"], None, ""),
+        fixture_tool("writer", &["argv", "{1}"], None, "effect = \"write\"\n"),
+        fixture_tool("reader", &["argv", "{1}"], None, "effect = \"ro\"\n"),
+        fixture_tool(
+            "danger",
+            &["argv", "{1}"],
+            None,
+            "effect = \"destructive\"\n"
+        ),
+    );
+    let config = write_config(&dir, &tools);
+
+    let cases: [(&[&str], &[&str], &str); 6] = [
+        (&[], &["implicit", "writer", "reader", "danger"], "implicit"),
+        (
+            &["--effect", "ro,write,destructive"],
+            &["implicit", "writer", "reader", "danger"],
+            "danger",
+        ),
+        (&["--effect", "ro"], &["reader"], "reader"),
+        (&["--effect", "ro,write"], &["writer", "reader"], "writer"),
+        (
+            &["--effect", "destructive"],
+            &["implicit", "danger"],
+            "implicit",
+        ),
+        (&["--effect=ro,ro"], &["reader"], "reader"),
+    ];
+    for (index, (options, expected, allowed)) in cases.iter().enumerate() {
+        let mut service = Service::start_with(&config, dir.path(), |command| {
+            command.args(*options);
+        });
+
+        let listed = service.request(1, "tools/list", json!({}));
+        let names: Vec<&str> = listed["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, *expected, "case {index}: {options:?}");
+
+        let result = service.call(2, allowed, json!({"1": allowed}));
+        assert_eq!(
+            text_of(&result),
+            [format!("[{allowed:?}]\n")],
+            "case {index}: {options:?}"
+        );
+        assert!(service.shutdown().success(), "case {index}: {options:?}");
+    }
+
+    let before_config = Command::new(env!("CARGO_BIN_EXE_cli2mcp"))
+        .args(["--effect", "ro"])
+        .arg(&config)
+        .current_dir(dir.path())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        before_config.status.success(),
+        "option before the position must be accepted: {}",
+        String::from_utf8_lossy(&before_config.stderr)
+    );
+    assert!(before_config.stderr.is_empty());
+}
+
+#[test]
+fn effect_filter_blocks_calls_to_excluded_tools() {
+    let dir = tempfile::tempdir().unwrap();
+    let tools = format!(
+        "{}{}{}",
+        fixture_tool("reader", &["argv", "{1}"], None, "effect = \"ro\"\n"),
+        fixture_tool(
+            "writer",
+            &["hold", "{1}", "0"],
+            None,
+            "effect = \"write\"\n"
+        ),
+        fixture_tool(
+            "danger",
+            &["hold", "{1}", "0"],
+            None,
+            "effect = \"destructive\"\n"
+        ),
+    );
+    let config = write_config(&dir, &tools);
+    let mut service = Service::start_with(&config, dir.path(), |command| {
+        command.args(["--effect", "ro"]);
+    });
+
+    for (id, name) in [(1, "writer"), (2, "danger")] {
+        let pid_file = dir.path().join(format!("{name}.pid"));
+        let response = service.call_request(id, name, json!({"1": pid_file.to_str().unwrap()}));
+        assert_eq!(response["error"]["code"], -32602);
+        assert_eq!(
+            response["error"]["message"],
+            format!("Unknown tool: {name}")
+        );
+        assert!(
+            !pid_file.exists(),
+            "{name} was spawned despite being filtered"
+        );
+    }
+
+    let result = service.call(3, "reader", json!({"1": "reader"}));
+    assert_eq!(text_of(&result), ["[\"reader\"]\n"]);
+}
+
+#[test]
+fn effect_filter_uses_inherited_effects_and_allows_empty_results() {
+    let dir = tempfile::tempdir().unwrap();
+    let tools = format!(
+        "{}{}",
+        fixture_tool("inherited", &["argv", "{1}"], None, ""),
+        fixture_tool("writer", &["argv", "{1}"], None, "effect = \"write\"\n"),
+    );
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        format!("[default]\ntimeout_ms = 2000\nenv_inherit = []\neffect = \"ro\"\n{tools}"),
+    )
+    .unwrap();
+
+    let mut read_only = Service::start_with(&config, dir.path(), |command| {
+        command.args(["--effect", "ro"]);
+    });
+    let listed = read_only.request(1, "tools/list", json!({}));
+    let names: Vec<&str> = listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["inherited"]);
+    assert_eq!(
+        text_of(&read_only.call(2, "inherited", json!({"1": "inherited"}))),
+        ["[\"inherited\"]\n"]
+    );
+    assert!(read_only.shutdown().success());
+
+    let mut none = Service::start_with(&config, dir.path(), |command| {
+        command.args(["--effect", "destructive"]);
+    });
+    let discover = none.request(1, "server/discover", json!({}));
+    assert_eq!(discover["result"]["resultType"], "complete");
+    let listed = none.request(2, "tools/list", json!({}));
+    assert_eq!(listed["result"]["tools"], json!([]));
+    let response = none.call_request(3, "inherited", json!({"1": "inherited"}));
+    assert_eq!(response["error"]["code"], -32602);
+    assert_eq!(response["error"]["message"], "Unknown tool: inherited");
+    assert!(none.shutdown().success());
+}
+
+#[test]
+fn effect_filter_rejects_invalid_arguments() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = write_config(&dir, "");
+
+    for arguments in [
+        vec!["--effect", "read_write"],
+        vec!["--effect", "unknown"],
+        vec!["--effect="],
+        vec!["--effect", "ro,"],
+        vec!["--effect", ",ro"],
+        vec!["--effect", "ro,,write"],
+        vec!["--effect"],
+        vec!["--effect", "ro", "--effect", "write"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_cli2mcp"))
+            .arg(&config)
+            .args(&arguments)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{arguments:?}");
+        assert!(output.stdout.is_empty(), "{arguments:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("error:"), "{arguments:?}: {stderr}");
+        assert!(stderr.contains("<EFFECTS>"), "{arguments:?}: {stderr}");
+    }
+}
+
+#[test]
 fn environment_and_working_directory_follow_the_configuration() {
     let dir = tempfile::tempdir().unwrap();
     let startup = dir.path().join("startup");

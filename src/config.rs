@@ -44,8 +44,9 @@ impl Default for DefaultConfigPart {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
+#[value(rename_all = "kebab-case")]
 pub(crate) enum ToolEffect {
     Ro,
     Write,
@@ -300,16 +301,14 @@ mod tests {
     fn empty_tool_list_and_valid_names_load() {
         assert!(load_str("").unwrap().tools.is_empty());
         assert!(load_str("tools = []").is_ok());
-        assert!(
-            load_str(
-                r#"
+        assert!(load_str(
+            r#"
                 [[tools]]
                 expose_name = "ns.tool_2-name"
                 description = "Valid"
                 exec = "printf"
                 "#
-            )
-            .is_ok()
-        );
+        )
+        .is_ok());
     }
 }

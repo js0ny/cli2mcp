@@ -6,7 +6,7 @@ mod template;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use rmcp::ServiceExt;
 use server::CliServer;
 
@@ -29,12 +29,29 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .required(true)
                 .value_parser(clap::value_parser!(PathBuf)),
         )
+        .arg(
+            Arg::new("effect")
+                .long("effect")
+                .value_name("EFFECTS")
+                .help(
+                    "Expose only tools with these comma-separated effects; omit to expose all tools",
+                )
+                .action(ArgAction::Set)
+                .value_delimiter(',')
+                .value_parser(clap::value_parser!(config::ToolEffect)),
+        )
         .get_matches();
 
     let path = matches
         .get_one::<PathBuf>("config")
         .expect("config is a required argument");
-    let server = CliServer::new(config::load(path)?)?;
+    let mut config = config::load(path)?;
+    if let Some(effects) = matches.get_many::<config::ToolEffect>("effect") {
+        config
+            .tools
+            .retain(|tool| effects.clone().any(|effect| *effect == tool.effect));
+    }
+    let server = CliServer::new(config)?;
     let service = match server.serve(rmcp::transport::stdio_pipes()).await {
         Ok(service) => service,
         Err(rmcp::service::ServerInitializeError::ConnectionClosed(_)) => return Ok(()),

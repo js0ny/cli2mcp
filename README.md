@@ -50,6 +50,12 @@ For example using pi
 }
 ```
 
+#### CLI Arguments
+
+- `--effect`: comma-splitted filters for effect
+  - `--effect ro`: Expose tools with read_only hint
+  - `--effect ro,write`: Expose tools with read_only hint and no hint
+
 ## Building
 
 ```bash
@@ -65,7 +71,7 @@ nix build github:js0ny/cli2mcp
 
 ## Roadmap
 
-- [ ] CLI Args: Expose ro only or do not expose destructive
+- [x] CLI Args: Expose ro only or do not expose destructive
 - [ ] MCP Server: Connect via Streamable HTTP
 - [ ] Config: `tools.success_codes`, a list of numbers that defines success code, prevent from reporting false negative.
     - For example, `rg` reports non zero when no matching 
