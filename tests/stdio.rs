@@ -343,14 +343,17 @@ fn exit_status_and_streams_map_to_tool_results() {
         fixture_tool("partial", &["exit", "3", "partial", "boom"], None, ""),
         fixture_tool("silent", &["exit", "3", "", ""], None, ""),
         fixture_tool("invalid", &["invalid-utf8"], None, ""),
+        fixture_tool(
+            "accepted",
+            &["exit", "1", "accepted", "ignored"],
+            None,
+            "success_codes = [0, 1]\n",
+        ),
     ]
     .concat();
     let mut service = Service::start(&write_config(&dir, &tools), dir.path());
 
-    assert_eq!(
-        text_of(&service.call(1, "empty", json!({}))),
-        ["Exit 0, no stdout"]
-    );
+    assert_eq!(text_of(&service.call(1, "empty", json!({}))), ["No stdout"]);
     assert_eq!(text_of(&service.call(2, "text", json!({}))), ["hello"]);
     assert_eq!(text_of(&service.call(3, "blank", json!({}))), [" \n"]);
     assert_eq!(
@@ -365,11 +368,14 @@ fn exit_status_and_streams_map_to_tool_results() {
         text_of(&service.call(6, "invalid", json!({}))),
         ["\u{fffd}\u{fffd}a"]
     );
+    let accepted = service.call(9, "accepted", json!({}));
+    assert_eq!(text_of(&accepted), ["accepted"]);
+    assert_eq!(accepted["isError"], false);
 
     assert_eq!(service.call(7, "partial", json!({}))["isError"], true);
     assert_eq!(service.call(8, "text", json!({}))["isError"], false);
     assert_eq!(
-        service.request(9, "tools/list", json!({}))["result"]["resultType"],
+        service.request(10, "tools/list", json!({}))["result"]["resultType"],
         "complete"
     );
 }

@@ -64,6 +64,7 @@ struct ToolConfig {
 
     timeout_ms: Option<u64>,
     effect: Option<ToolEffect>,
+    success_codes: Option<Vec<i32>>,
     cwd: Option<String>,
     env: Option<HashMap<String, String>>,
     // An explicit empty list disables inheritance rather than using the defaults.
@@ -78,6 +79,7 @@ pub(crate) struct ResolvedToolConfig {
     pub(crate) args: Vec<String>,
     pub(crate) timeout_ms: u64,
     pub(crate) effect: ToolEffect,
+    pub(crate) success_codes: Vec<i32>,
     pub(crate) cwd: Option<String>,
     pub(crate) cwd_fallback: Option<String>,
     pub(crate) env: HashMap<String, String>,
@@ -145,6 +147,7 @@ fn merge_tool_config(tool: ToolConfig, defaults: &DefaultConfigPart) -> Resolved
         args: tool.args.unwrap_or_default(),
         timeout_ms: tool.timeout_ms.unwrap_or(defaults.timeout_ms),
         effect: tool.effect.unwrap_or(defaults.effect),
+        success_codes: tool.success_codes.unwrap_or_else(|| vec![0]),
         cwd: tool.cwd.or_else(|| defaults.cwd.clone()),
         cwd_fallback: defaults.cwd_fallback.clone(),
         env,
@@ -175,7 +178,17 @@ mod tests {
 
             assert_eq!(tool.timeout_ms, 500);
             assert_eq!(tool.effect, ToolEffect::Destructive);
+            assert_eq!(tool.success_codes, [0]);
         }
+    }
+
+    #[test]
+    fn configured_success_codes_are_preserved() {
+        let contents = format!("{TOOL}success_codes = [-1, 1]\n");
+        let config: FileConfig = toml::from_str(&contents).unwrap();
+        let tool = merge_tool_config(config.tools.into_iter().next().unwrap(), &config.default);
+
+        assert_eq!(tool.success_codes, [-1, 1]);
     }
 
     #[test]
@@ -301,14 +314,16 @@ mod tests {
     fn empty_tool_list_and_valid_names_load() {
         assert!(load_str("").unwrap().tools.is_empty());
         assert!(load_str("tools = []").is_ok());
-        assert!(load_str(
-            r#"
+        assert!(
+            load_str(
+                r#"
                 [[tools]]
                 expose_name = "ns.tool_2-name"
                 description = "Valid"
                 exec = "printf"
                 "#
-        )
-        .is_ok());
+            )
+            .is_ok()
+        );
     }
 }

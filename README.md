@@ -26,6 +26,8 @@ expose_name = "echo"
 description = "Print a message"
 exec = "printf"
 args = ["%s\n", "Hello from cli2mcp"]
+# Exit codes that count as a successful tool call.
+success_codes = [0]
 env_inherit = ["PATH"]
 ```
 
@@ -73,7 +75,7 @@ nix build github:js0ny/cli2mcp
 
 - [x] CLI Args: Expose ro only or do not expose destructive
 - [ ] MCP Server: Connect via Streamable HTTP
-- [ ] Config: `tools.success_codes`, a list of numbers that defines success code, prevent from reporting false negative.
+- [x] Config: `tools.success_codes`, a list of numbers that defines success code, prevent from reporting false negative.
     - For example, `rg` reports non zero when no matching 
 - [ ] Config: `tools.output_stderr`, control whether a tool should output stderr in the return json ("never" | "on_error" | "always")
 - [ ] MCP Server: Implement `resources/`, allow client reaches resources via uris

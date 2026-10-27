@@ -7,4 +7,6 @@ expose_name = "echo"
 description = "Print a message"
 exec = "printf"
 args = ["%s\n", "Hello from cli2mcp"]
+# Exit codes that count as a successful tool call.
+success_codes = [0]
 env_inherit = ["PATH"]

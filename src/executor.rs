@@ -21,9 +21,8 @@ compile_error!("cli2mcp currently requires Unix process-group support");
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 
-const SUCCESS_CODE: i32 = 0;
 const STREAM_BUFFER_SIZE: usize = 8 * 1024;
-const NO_STDOUT: &str = "Exit 0, no stdout";
+const NO_STDOUT: &str = "No stdout";
 
 /// Runs one configured tool and encodes the outcome as an MCP tool result.
 ///
@@ -80,7 +79,7 @@ pub(crate) async fn execute(
     match selected {
         Ok(Attempt::Exited(status)) => {
             owner.disarm();
-            Some(report_for_status(status, stdout, stderr).into_result())
+            Some(report_for_status(status, &tool.success_codes, stdout, stderr).into_result())
         }
         Ok(Attempt::ReadFailed(error)) => {
             let mut report = Report::error(format!("Failed to read process output: {error}"));
@@ -275,9 +274,14 @@ impl Report {
     }
 }
 
-fn report_for_status(status: ExitStatus, stdout: Vec<u8>, stderr: Vec<u8>) -> Report {
+fn report_for_status(
+    status: ExitStatus,
+    success_codes: &[i32],
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+) -> Report {
     let headline = match status.code() {
-        Some(SUCCESS_CODE) => {
+        Some(code) if success_codes.contains(&code) => {
             return Report {
                 is_error: false,
                 headline: String::new(),
